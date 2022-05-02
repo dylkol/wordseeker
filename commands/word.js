@@ -4,6 +4,7 @@ const wiktionary = require('../wiktionary.js');
 const Discord = require('discord.js');
 const LEFT = '⬅️';
 const RIGHT = '➡️';
+const EMBED_FIELD_LENGTH = 1024;
 module.exports = {
     name: 'word',
     usage: '<word> <language>(optional, default English)',
@@ -22,10 +23,10 @@ module.exports = {
             let wikObj = await wiktionary.retrieveObject(args[0], lang);
             await navigationLoop(message, wikObj);
         } catch (error) {
-            if (error !== 'time') {
+            if (error.message == undefined)
+                console.error(error.message);
+            else 
                 message.channel.send(error.message);
-                console.error(error);
-            }
         }
     }
 };
@@ -33,22 +34,53 @@ module.exports = {
 function capitalize(strings) {
     let newStrings = [];
     for (const string of strings) {
-        let newString = string[0].toUpperCase();
-        newString += string.slice(1);
+        let newString = [];
+        for (const splitDash of string.split('-')) {
+            const newSplitString = splitDash[0].toUpperCase() + splitDash.slice(1);
+            newString.push(newSplitString);
+        }
+        newString = newString.join('-');
         newStrings.push(newString);
     }
     return newStrings;
 }
 
+//function createEmbedsForEtymology(data, index) {
+//    const etymologyObj = data.etymologies[index];
+//    etymologyStr = etymologyObj.etymology
+//    let chunks = []
+//    for (let i = 0; let total = etymologyStr.length; i < total; i += EMBED_FIELD_LENGTH) 
+//        chunks.push(etymologies.substr(i, i + EMBED_FIELD_LENGTH));
+//    chunks = 
+//}
+
 function createEmbed(data, index) {
     const etymologyObj = data.etymologies[index];
+
+    var etymologyVal = "";
+    var pronunciationsVal = "";
+
+    //Check if not empty
+    if (!etymologyObj.etymology)
+        etymologyVal = "empty"
+    else
+        etymologyVal = etymologyObj.etymology.toEmbedString().substring(0, EMBED_FIELD_LENGTH)
+
+    if (!etymologyObj.pronunciations || etymologyObj.pronunciations == '') 
+        pronunciationsVal = "empty"
+    else
+        pronunciationsVal = etymologyObj.pronunciations
+        
+    console.log(`Etymology: ${etymologyVal}`);
+    console.log(`Pronunciation: ${pronunciationsVal}`);
+
     const embed = new Discord.MessageEmbed()
     .setTitle(data.word)
     .setURL(data.link)
     .setDescription(etymologyObj.type)
     .addFields(
-        { name: 'Etymology', value: etymologyObj.etymology },
-        { name: 'Pronunciations', value: etymologyObj.pronunciations },
+        { name: 'Etymology', value: etymologyVal },
+        { name: 'Pronunciations', value: pronunciationsVal },
     )
     .setFooter(`Source: ${data.source}\n${index + 1}/${data.etymologies.length}`);
     return embed;
@@ -77,6 +109,7 @@ async function navigationLoop(message, wikObj) {
                 let rightReact = await response.react(RIGHT);
                 added.push(RIGHT);
             }
+
             let collected = await response.awaitReactions((reaction, user) => {
                 return added.includes(reaction.emoji.name) && user.id === message.author.id;
             }, { max: 1, time: 180000, errors: ['time'] });

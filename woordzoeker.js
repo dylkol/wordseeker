@@ -23,7 +23,7 @@ client.on('message', message => {
         const args = message.content.slice(prefix.length).trim().split(/\s+/).map((arg) => arg.trim());
         const commandName = args.shift().toLowerCase();
 
-        // check if command exist in collection, if so, execute it
+        // check if command exists in collection, if so, execute it
         if (!client.commands.has(commandName)) return;
 
         const command = client.commands.get(commandName);
