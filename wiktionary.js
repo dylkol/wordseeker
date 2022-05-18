@@ -27,7 +27,7 @@ async function getHTMLPage(word) {
     try {
         const url = `https://en.wiktionary.org/w/rest.php/v1/page/${encodeURIComponent(word)}/html`;
         const response = await fetch(url, 
-        {'User-Agent': `Woordzoeker discord bot/${ver} (dylkol@protonmail.com) discord.js/12.0`}
+        {'User-Agent': `Wordseeker discord bot/${ver} (zuyderzee@protonmail.com) discord.js/12.0`}
         );
         if (response.status === 404) throw new Error('Word not found.');
         else if (response.status !== 200) throw new Error(`Something went wrong retrieving Wiktionary data:\n` +
@@ -53,52 +53,23 @@ function parseWiktionaryObject(html, url, lang) {
     }
 }
 
-// Etymologies are stored in a section with an h3 tag with id starting with Etymology.
-// function parseEtymologies(node) {
-//     try {
-//         const headers = node.querySelectorAll('h3[id^="Etymology"]');
-//         if (headers.length === 0) {
-//             throw new Error('Wiktionary etymology not available for this word.');
-//         }
-//         const etymologies = Array.from(headers).map(header => {
-//             let sibling = header.nextElementSibling;
-//             let etymologyText = '';
-//             while (sibling && sibling.tagName !== 'SECTION') {
-//                 etymologyText += `${sibling.textContent}`;
-//                 sibling = sibling.nextElementSibling;
-//                 // more siblings so add newlines
-//                 if (sibling && sibling.tagName !== 'SECTION') etymologyText += '\n\n'; 
-//             }
-//             return etymologyText;
-//         });
-//         if (etymologies.length > 1) {
-//             const init = 'Etymology 1\n';
-//             const result = etymologies.reduce((accum, current, index) => 
-//                 accum += (index < etymologies.length - 1) ? `${current}\n\nEtymology ${index+2}\n` : current, 
-//                 init);
-//             return result;
-//         } else {
-//             return etymologies[0];
-//         }
-//     } catch (error) {
-//         throw error;
-//     }
-// }
-
-// Etymologies are stored in a section with an h3 tag with id starting with Etymology.
 function parseEtymologies(node) {
     try {
+        // Etymologies are stored in a section with an h3 tag with id starting with Etymology.
         const headers = node.querySelectorAll('h3[id^="Etymology"]');
         /* If no etymology found, the object structure is still based on etymology at the root.
-         * Hence whatever is available (pronunciation, definition, etc.) will still be inside 
+         * Hence whatever is available (pronunciation, parts of speech, etc.) will still be inside 
          * an etymologies array in the object, but the etymology text will be null. */
-        if (headers.length === 0) { 
+        if (headers.length === 0) {
             const pronunciations = parsePronunciations(node);
-            return [ { 'etymology': null, 'pronunciations': pronunciations } ];
+            const partsOfSpeech = parsePartsOfSpeech(node, 0);
+            return [ { 'etymology': null, 'pronunciations': pronunciations, 'partsOfSpeech': partsOfSpeech } ];
         } else {
-            const etymologies = Array.from(headers).map(header => {
+            const etymologies = Array.from(headers).map((header, index) => {
                 const nodes = [];
                 let sibling = header.nextElementSibling;
+
+                // Get all the section sibling tags
                 while (sibling && sibling.tagName !== 'P') {
                     sibling = sibling.nextElementSibling;
                 }
@@ -111,7 +82,9 @@ function parseEtymologies(node) {
                 const etymology = new classes.Etymology(nodes);
 
                 const pronunciations = parsePronunciations(header.parentNode);
-                return { 'etymology': etymology, 'pronunciations': pronunciations};
+                const partsOfSpeech = parsePartsOfSpeech(header.parentNode);
+
+                return { 'etymology': etymology, 'pronunciations': pronunciations, 'partsOfSpeech': partsOfSpeech};
             });
             return etymologies;
         }
@@ -120,38 +93,53 @@ function parseEtymologies(node) {
     }
 }
 
-//Similar to etymologies, except there is always only one heading
+function parsePartsOfSpeech(node) {
+    const pos_headers = ['Adjective', 'Adverb', 'Ambiposition', 'Article', 'Circumposition', 'Classifier', 'Conjunction', 
+        'Contraction', 'Counter', 'Determiner', 'Ideophone', 'Interjection', 'Noun', 'Numeral', 'Participle', 
+        'Particle', 'Postposition', 'Preposition', 'Pronoun', 'Proper noun', 'Verb', 
+        'Circumfix', 'Combining form', 'Infix', 'Interfix', 'Prefix', 'Root', 'Suffix',
+        'Diacritical mark', 'Letter', 'Ligature', 'Number', 'Punctuation mark', 'Syllable', 'Symbol', 
+        'Phrase', 'Proverb', 'Prepositional phrase', 'Han character', 'Hanzi', 'Kanji', 'Hanja',
+        'Romanization', 'Logogram', 'Determinative']; // Possible part-of-speech headings according to https://en.wiktionary.org/wiki/Wiktionary:Entry_layout#Part_of_speech
+        
+    
+    try {
+
+        const headers = [];
+        for (const pos of pos_headers) {
+            const query = `[id^="${pos.replace(' ', '_')}"]`;
+            headers.push(...Array.from(node.querySelectorAll(query)));
+        }
+
+        if (headers.length == 0) {
+            // Sometimes the part of speech is defined outside the etymology it is the same for multiple etymologies, so we check the parent as well before giving up.
+            for (const pos of pos_headers) {
+                const query = `[id^="${pos.replace(' ', '_')}"]`;
+                headers.push(...Array.from(node.parentNode.querySelectorAll(query)));
+            }
+            if (headers.length == 0) return [];
+        }
+
+        return headers.map(header => new classes.PartOfSpeech(header));
+    }
+    catch (error) {
+        throw error;
+    }
+
+}
+
 function parsePronunciations(node) {
     try {
+        //Similar to etymologies, except there is always only one heading
         let header = node.querySelector('[id^="Pronunciation"]');
         if (!header) {
-            // Sometimes pronunciation is defined above etymology if the pronunciation for multiple etymologies is the same
+            // Sometimes pronunciation is defined above etymology if the pronunciation for multiple etymologies is the same, so we check the parent as well before giving up.
             header = node.parentNode.querySelector('[id^="Pronunciation"]');
-            if (!header) return null;
+            if (!header) return [];
         }
-        const nodes = [];
-        const pronunciationNode = header.nextElementSibling;
-        nodes.push(pronunciationNode);
-        let pronunciationsText = '';
-        let ipas;
-        const qualifier_ipas = {};
-        const qualifiers = pronunciationNode.getElementsByClassName('qualifier-content'); // determines what type of pronounciation, e.g. UK, US, Northern German, etc
-        for (const qualifier of qualifiers) {
-            ipas = qualifier.parentNode.getElementsByClassName('IPA'); // get all the IPAs for qualifier
-            qualifier_ipas[qualifier.textContent] = Array.from(ipas);
-        }
-        const all_ipas = Array.from(pronunciationNode.getElementsByClassName('IPA'));
-        const ipas_no_qualifier = all_ipas.filter(ipas => !Object.values(qualifier_ipas).includes(ipas));
-
-        if (ipas_no_qualifier.length > 0)
-            pronunciationsText += `${ipas_no_qualifier.map(ipaNode => ipaNode.textContent).join(', ')}\n`;
-        if (Object.keys(qualifier_ipas).length > 0) {
-                // Separate qualifiers by new line, all the IPAs for a qualifier separated by a comma and space
-            pronunciationsText += Object.keys(qualifier_ipas).map(qualifier => {
-                return `${qualifier}: ${qualifier_ipas[qualifier].map(ipaNode => ipaNode.textContent).join(', ')}\n`;
-            });
-        }
-        return pronunciationsText;
+        const nodes = header.nextElementSibling.children;
+        const pronunciations = Array.from(nodes).map(node => new classes.Pronunciation(node));
+        return pronunciations;
     } catch (error) {
         throw error;
     }

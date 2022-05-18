@@ -5,6 +5,7 @@ const Discord = require('discord.js');
 const LEFT = '⬅️';
 const RIGHT = '➡️';
 const EMBED_FIELD_LENGTH = 1024;
+
 module.exports = {
     name: 'word',
     usage: '<word> <language>(optional, default English)',
@@ -45,75 +46,116 @@ function capitalize(strings) {
     return newStrings;
 }
 
-//function createEmbedsForEtymology(data, index) {
-//    const etymologyObj = data.etymologies[index];
-//    etymologyStr = etymologyObj.etymology
-//    let chunks = []
-//    for (let i = 0; let total = etymologyStr.length; i < total; i += EMBED_FIELD_LENGTH) 
-//        chunks.push(etymologies.substr(i, i + EMBED_FIELD_LENGTH));
-//    chunks = 
-//}
 
-function createEmbed(data, index) {
-    const etymologyObj = data.etymologies[index];
+function createEmbed(data, etymologyIndex, posIndex, totalIndex, totalLength) {
+    // Two separate indices to first refer to the etymology, and then different parts of speech within that etymology, which contain different definitions.
+    const etymologyObj = data.etymologies[etymologyIndex];
 
     var etymologyVal = "";
     var pronunciationsVal = "";
+    var partOfSpeechVal = "";
+
 
     //Check if not empty
     if (!etymologyObj.etymology)
-        etymologyVal = "empty"
+        etymologyVal = "Not available.";
     else
-        etymologyVal = etymologyObj.etymology.toEmbedString().substring(0, EMBED_FIELD_LENGTH)
+        etymologyVal = etymologyObj.etymology.toEmbedString().substring(0, EMBED_FIELD_LENGTH);
 
-    if (!etymologyObj.pronunciations || etymologyObj.pronunciations == '') 
-        pronunciationsVal = "empty"
+    if (etymologyObj.pronunciations.length === 0) 
+        pronunciationsVal = "Not available.";
     else
-        pronunciationsVal = etymologyObj.pronunciations
-        
-    console.log(`Etymology: ${etymologyVal}`);
-    console.log(`Pronunciation: ${pronunciationsVal}`);
+        // Since the pronunciations are formed from <li> elements under the Pronunciation header, the ones that do not match actual pronunciations form empty strings in the end,
+        // so that's why they are removed.
+        pronunciationsVal = etymologyObj.pronunciations.map(pronunciation => pronunciation.toEmbedString())
+            .filter(text=> text !== '').join('\n').substring(0, EMBED_FIELD_LENGTH);
+        if (pronunciationsVal === '') pronunciationsVal = 'Not available.';
+
+    if (etymologyObj.partsOfSpeech.length === 0)
+        partOfSpeechVal = "Part of speech not available.";
+    else
+        partOfSpeechVal = etymologyObj.partsOfSpeech[posIndex].toEmbedString().substring(0, EMBED_FIELD_LENGTH);
+
+    //console.log(...etymologyObj);
 
     const embed = new Discord.MessageEmbed()
     .setTitle(data.word)
     .setURL(data.link)
-    .setDescription(etymologyObj.type)
+    .setDescription(partOfSpeechVal)
     .addFields(
         { name: 'Etymology', value: etymologyVal },
         { name: 'Pronunciations', value: pronunciationsVal },
+        
     )
-    .setFooter(`Source: ${data.source}\n${index + 1}/${data.etymologies.length}`);
+    .setFooter(`Source: ${data.source}\n${totalIndex+1}/${totalLength}`);
     return embed;
 }
 
-// Go through different etymologies for same word using react arrows.
 async function navigationLoop(message, wikObj) {
-    let index = 0;
+    // Go through different etymologies and parts of speech for the same word using react emoji arrows.
+    let etymologyIndex = 0;
+    let posIndex = 0;
+    let totalIndex = 0;
     let first = true;
-    let embed = createEmbed(wikObj, 0);
-    let response = await message.channel.send(embed); 
-    let leftReact;
-    let rightReact;
-    if (wikObj.etymologies.length > 1) { 
+
+    const etymologiesLength = wikObj.etymologies.length;
+    let etymologyObj = wikObj.etymologies[etymologyIndex];
+    let partsOfSpeechLength = etymologyObj.partsOfSpeech.length;
+
+    // Sum lengths of all parts of speech arrays for each etymology.
+    const totalLength = Math.max(1, wikObj.etymologies.map(etymologyObj => etymologyObj.partsOfSpeech.length).reduce((acc, curr) => acc + curr)); 
+
+    let embed = createEmbed(wikObj, etymologyIndex, posIndex, totalIndex, totalLength);
+    let response = await message.channel.send(embed);
+
+
+    // Helper functions that will update either both indices or just the posIndex depending on the position.
+    function decreaseIndex() {
+        if (posIndex !== 0) {
+            posIndex--;
+        }
+        else {
+            etymologyIndex--;
+            etymologyObj = wikObj.etymologies[etymologyIndex];
+            partsOfSpeechLength = etymologyObj.partsOfSpeech.length;
+            posIndex = partsOfSpeechLength-1;
+        }
+        totalIndex--;
+    }
+    function increaseIndex() {
+        if (posIndex !== partsOfSpeechLength-1) {
+            posIndex++;
+        }
+        else {
+            etymologyIndex++;
+            etymologyObj = wikObj.etymologies[etymologyIndex];
+            partsOfSpeechLength = etymologyObj.partsOfSpeech.length;
+            posIndex = 0;
+        }
+        totalIndex++;
+    }
+
+    if (etymologiesLength > 1 || partsOfSpeechLength > 1) { 
         while (true) {
             if (!first) {
                 await response.reactions.removeAll();
-                embed = createEmbed(wikObj, index);
+                embed = createEmbed(wikObj, etymologyIndex, posIndex, totalIndex, totalLength);
                 response = await response.edit(embed);
             } else first = false; 
             let added = [];
-            if (index !== 0) { 
-                let leftReact = await response.react(LEFT);
+            if (etymologyIndex !== 0 || posIndex !== 0) { 
+                await response.react(LEFT);
                 added.push(LEFT);
-            } if (index !== wikObj.etymologies.length - 1) {
-                let rightReact = await response.react(RIGHT);
+            } if (etymologyIndex !== wikObj.etymologies.length - 1 || 
+                  posIndex !== etymologyObj.partsOfSpeech.length - 1) {
+                await response.react(RIGHT);
                 added.push(RIGHT);
             }
 
             let collected = await response.awaitReactions((reaction, user) => {
                 return added.includes(reaction.emoji.name) && user.id === message.author.id;
             }, { max: 1, time: 180000, errors: ['time'] });
-            collected.first().emoji.name === LEFT ? index-- : index++
+            collected.first().emoji.name === LEFT ? decreaseIndex() : increaseIndex();
         }
     }
 }
