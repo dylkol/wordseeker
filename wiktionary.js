@@ -10,7 +10,9 @@ module.exports = {
         try {
             const { html, url } = await getHTMLPage(word, lang);
             const parsed = parseWiktionaryObject(html, url, lang);
-            const link = `https://en.wiktionary.org/wiki/${encodeURIComponent(word + `#${lang}`)}`;
+            const link = lang.isProto ? 
+                `https://en.wiktionary.org/wiki/${encodeURIComponent(`Reconstruction:${lang.language}/${word.replace('*', '')}`)}` :
+                `https://en.wiktionary.org/wiki/${encodeURIComponent(word + `#${lang}`)}`;
             parsed.word = word;
             parsed.source = source;
             parsed.link = link;
