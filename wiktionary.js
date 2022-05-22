@@ -12,7 +12,7 @@ module.exports = {
             const parsed = parseWiktionaryObject(html, url, lang);
             const link = lang.isProto ? 
                 `https://en.wiktionary.org/wiki/${encodeURIComponent(`Reconstruction:${lang.language}/${word.replace('*', '')}`)}` :
-                `https://en.wiktionary.org/wiki/${encodeURIComponent(word + `#${lang}`)}`;
+                `https://en.wiktionary.org/wiki/${encodeURIComponent(word + `#${lang.language}`)}`;
             parsed.word = word;
             parsed.source = source;
             parsed.link = link;
