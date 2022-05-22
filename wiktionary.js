@@ -8,7 +8,7 @@ const source = 'Wiktionary';
 module.exports = {
     retrieveObject: async(word, lang) => {
         try {
-            const { html, url } = await getHTMLPage(word);
+            const { html, url } = await getHTMLPage(word, lang);
             const parsed = parseWiktionaryObject(html, url, lang);
             const link = `https://en.wiktionary.org/wiki/${encodeURIComponent(word + `#${lang}`)}`;
             parsed.word = word;
@@ -21,13 +21,20 @@ module.exports = {
     }
 }
 
-const ver = '0.0.3'
+const ver = '0.0.4';
+const userAgent = `Wordseeker discord bot/${ver} (zuyderzee@protonmail.com) discord.js/12.0`;
 
-async function getHTMLPage(word) {
+async function getHTMLPage(word, lang) {
     try {
-        const url = `https://en.wiktionary.org/w/rest.php/v1/page/${encodeURIComponent(word)}/html`;
+        let url = '';
+        if (lang.isProto)
+            // Reconstruction pages are quite different, with the language itself prefixed by "Reconstruction:" included in the URL.
+            url = `https://en.wiktionary.org/w/rest.php/v1/page/${encodeURIComponent(`Reconstruction:${lang.language}/${word.replace('*', '')}`)}/html`;
+        else
+            url = `https://en.wiktionary.org/w/rest.php/v1/page/${encodeURIComponent(word)}/html`;
+        
         const response = await fetch(url, 
-        {'User-Agent': `Wordseeker discord bot/${ver} (zuyderzee@protonmail.com) discord.js/12.0`}
+        {'User-Agent': userAgent}
         );
         if (response.status === 404) throw new Error('Word not found.');
         else if (response.status !== 200) throw new Error(`Something went wrong retrieving Wiktionary data:\n` +
@@ -43,7 +50,7 @@ function parseWiktionaryObject(html, url, lang) {
     try {
         const doc = new JSDOM(html, { 'url': url }).window.document;
         // Parent of heading containing language id is the section describing the word in that language.
-        const langElem = doc.getElementById(lang);
+        const langElem = doc.getElementById(lang.language);
         if (!langElem) throw new Error('Word not found in that language. However, it is available in other languages.');
         const section = langElem.parentNode;
         const etymologies = parseEtymologies(section);

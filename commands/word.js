@@ -2,6 +2,7 @@
 
 const wiktionary = require('../wiktionary.js');
 const Discord = require('discord.js');
+const { parse } = require('path');
 const LEFT = '⬅️';
 const RIGHT = '➡️';
 const EMBED_FIELD_LENGTH = 1024;
@@ -12,13 +13,10 @@ module.exports = {
     min_args: 1,
     description: 'Look up a definition and/or etymology of a word in a given language',
     execute : async (message, args) => {
-        let lang = '';
-        if (args.length === 1) lang = 'English';
+        let lang = {language: '', isProto: false};
+        if (args.length === 1) lang.language = 'English';
         else {
-            // Put underscores between multiple lang args, e.g. Middle English becomes Middle_English
-            // Also do it for languages seperated by - (e.g. Serbo-Croatian)
-            lang = capitalize(args.slice(1));
-            lang = lang.join('_');
+            lang = parseLanguage(args);
         }
         try {
             let wikObj = await wiktionary.retrieveObject(args[0], lang);
@@ -36,6 +34,7 @@ function capitalize(strings) {
     let newStrings = [];
     for (const string of strings) {
         let newString = [];
+        // Capitalize each component of languages seperated by - (e.g. Serbo-Croatian)
         for (const splitDash of string.split('-')) {
             const newSplitString = splitDash[0].toUpperCase() + splitDash.slice(1);
             newString.push(newSplitString);
@@ -44,6 +43,15 @@ function capitalize(strings) {
         newStrings.push(newString);
     }
     return newStrings;
+}
+
+function parseLanguage(args) {
+    const parsed = {language: '', isProto: false};
+    parsed.language = capitalize(args.slice(1)).join('_'); // Put underscores between multiple lang args, e.g. Middle English becomes Middle_English
+
+    // Add 'Reconstruction:' if it is a proto language
+    parsed.isProto = parsed.language.includes('Proto');
+    return parsed;
 }
 
 
