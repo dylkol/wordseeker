@@ -1,0 +1,24 @@
+{
+  "name": "wordseeker",
+  "version": "1.0.0",
+  "description": "Discord Wiktionary lookup bot",
+  "main": "wordseeker.js",
+  "scripts": {
+    "test": "echo \"Error: no test specified\" && exit 1"
+  },
+  "repository": {
+    "type": "git",
+    "url": "git+https://github.com/dylkol/woordzoeker.git"
+  },
+  "author": "Dylan Koldenhof",
+  "license": "ISC",
+  "bugs": {
+    "url": "https://github.com/dylkol/woordzoeker/issues"
+  },
+  "homepage": "https://github.com/dylkol/woordzoeker#readme",
+  "dependencies": {
+    "discord.js": "^14.14.1",
+    "dotenv": "^16.3.1",
+    "jsdom": "^22.1.0"
+  }
+}
