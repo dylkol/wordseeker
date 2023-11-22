@@ -1,4 +1,4 @@
 # woordzoeker
 Discord dictionary/etymology bot
 
-Right now retrieves Wiktionary etymologies and pronunciations using the command ?word \<word\> \<language\>. Does not show definitions yet.
+Right now retrieves Wiktionary etymologies, pronunciations and definitions using the command `?word <word> <language>`, not updated to the new API yet. Needs a .env file with an API token.
