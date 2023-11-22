@@ -13,6 +13,7 @@ module.exports = {
             const link = lang.isProto ? 
                 `https://en.wiktionary.org/wiki/${encodeURIComponent(`Reconstruction:${lang.language}/${word.replace('*', '')}`)}` :
                 `https://en.wiktionary.org/wiki/${encodeURIComponent(word + `#${lang.language}`)}`;
+			parsed.lang = lang.language;
             parsed.word = word;
             parsed.source = source;
             parsed.link = link;
@@ -23,8 +24,8 @@ module.exports = {
     }
 }
 
-const ver = '0.0.4';
-const userAgent = `Wordseeker discord bot/${ver} (zuyderzee@protonmail.com) discord.js/12.0`;
+const ver = '1.0';
+const userAgent = `Wordseeker discord bot/${ver} (zuyderzee@protonmail.com) discord.js/14.0`;
 
 async function getHTMLPage(word, lang) {
     try {
@@ -113,22 +114,23 @@ function parsePartsOfSpeech(node) {
         
     
     try {
-
         const headers = [];
         for (const pos of pos_headers) {
-            const query = `[id^="${pos.replace(' ', '_')}"]`;
+			// Id either matches exactly e.g. (id=Noun) or if there are 
+			// multiple has a underscore with a number attached (id=Noun_2)
+            const query = `[id="${pos.replace(' ', '_')}"], [id^="${pos.replace(' ', '_')}_"]`;
             headers.push(...Array.from(node.querySelectorAll(query)));
         }
 
         if (headers.length == 0) {
-            // Sometimes the part of speech is defined outside the etymology it is the same for multiple etymologies, so we check the parent as well before giving up.
+            // Sometimes the part of speech is defined outside the etymology. 
+			// It is the same for multiple etymologies, so we check the parent as well before giving up.
             for (const pos of pos_headers) {
-                const query = `[id^="${pos.replace(' ', '_')}"]`;
+				const query = `[id="${pos.replace(' ', '_')}"], [id^="${pos.replace(' ', '_')}_"]`;
                 headers.push(...Array.from(node.parentNode.querySelectorAll(query)));
             }
             if (headers.length == 0) return [];
         }
-
         return headers.map(header => new classes.PartOfSpeech(header));
     }
     catch (error) {
@@ -142,7 +144,8 @@ function parsePronunciations(node) {
         //Similar to etymologies, except there is always only one heading
         let header = node.querySelector('[id^="Pronunciation"]');
         if (!header) {
-            // Sometimes pronunciation is defined above etymology if the pronunciation for multiple etymologies is the same, so we check the parent as well before giving up.
+            // Sometimes pronunciation is defined above etymology if the pronunciation 
+			// for multiple etymologies is the same, so we check the parent as well before giving up.
             header = node.parentNode.querySelector('[id^="Pronunciation"]');
             if (!header) return [];
         }

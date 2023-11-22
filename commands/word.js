@@ -8,26 +8,58 @@ const RIGHT = '➡️';
 const EMBED_FIELD_LENGTH = 1024;
 
 module.exports = {
-    name: 'word',
-    usage: '<word> <language>(optional, default English)',
-    min_args: 1,
-    description: 'Look up a definition and/or etymology of a word in a given language',
-    execute : async (message, args) => {
-        let lang = {language: '', isProto: false};
-        if (args.length === 1) lang.language = 'English';
-        else {
-            lang = parseLanguage(args);
-        }
-        try {
-            let wikObj = await wiktionary.retrieveObject(args[0], lang);
-            await navigationLoop(message, wikObj);
-        } catch (error) {
-            if (error.message == undefined)
-                console.error(error.message);
-            else 
-                message.channel.send(error.message);
-        }
-    }
+	data: new Discord.SlashCommandBuilder()
+		.setName('word')
+		.setDescription('Look up a definition and/or etymology of a word in a given language.')
+		.addStringOption(option => 
+			option.setName('word')
+				  .setDescription('The word to look up.')
+				  .setRequired(true))
+		.addStringOption(option => 
+			option.setName('lang')
+				  .setDescription('The language of the word (default: English).')),
+
+	async execute(interaction) {
+		await interaction.deferReply()
+		let lang = {language: '', isProto: false};
+		const lang_input = interaction.options.getString('lang');
+		if (lang_input == undefined) lang.language = 'English';
+		else lang = parseLanguage(lang_input.split(' '));
+
+		try {
+			let word = interaction.options.getString('word');
+			let wikObj = await wiktionary.retrieveObject(word, lang);
+			await navigationLoop(interaction, wikObj);
+		} catch (error) {
+			if (error.message == undefined)
+				console.error(error.message);
+			else 
+				await interaction.followUp( { content: error.message } );
+		}
+	},
+
+	old: {
+		name: 'word',
+		usage: '<word> <language>(optional, default English)',
+		min_args: 1,
+		description: 'Look up a definition and/or etymology of a word in a given language',
+		execute : async (message, args) => {
+			let lang = {language: '', isProto: false};
+			if (args.length === 1) lang.language = 'English';
+			else {
+				lang = parseLanguage(args.slice(1));
+			}
+			try {
+				let wikObj = await wiktionary.retrieveObject(args[0], lang);
+				await navigationLoop(message, wikObj);
+			} catch (error) {
+				if (error.message == undefined)
+					console.error(error.message);
+				else 
+					message.channel.send(error.message);
+			}
+		}
+	}
 };
 
 function capitalize(strings) {
@@ -45,12 +77,16 @@ function capitalize(strings) {
     return newStrings;
 }
 
-function parseLanguage(args) {
+function parseLanguage(lang_args) {
+	// Excepts lang_args to be an array of strings
     const parsed = {language: '', isProto: false};
-    parsed.language = capitalize(args.slice(1)).join('_'); // Put underscores between multiple lang args, e.g. Middle English becomes Middle_English
+    parsed.language = capitalize(lang_args).join('_'); // Put underscores between multiple lang args, e.g. Middle English becomes Middle_English
 
     // Add 'Reconstruction:' if it is a proto language
     parsed.isProto = parsed.language.includes('Proto');
+	if (parsed.isProto)
+	// Words for proto langs are usually separated by dashes. E.g. "proto slavic" will become "Proto-Slavic"
+		parsed.language = parsed.language.replaceAll('_', '-') 
     return parsed;
 }
 
@@ -86,16 +122,16 @@ function createEmbed(data, etymologyIndex, posIndex, totalIndex, totalLength) {
 
     //console.log(...etymologyObj);
 
-    const embed = new Discord.MessageEmbed()
+    const embed = new Discord.EmbedBuilder()
     .setTitle(data.word)
     .setURL(data.link)
     .setDescription(partOfSpeechVal)
     .addFields(
+        { name: 'Language', value: data.lang },
         { name: 'Etymology', value: etymologyVal },
         { name: 'Pronunciations', value: pronunciationsVal },
-        
     )
-    .setFooter(`Source: ${data.source}\n${totalIndex+1}/${totalLength}`);
+    .setFooter({ text:`Source: ${data.source}\n${totalIndex+1}/${totalLength}` } );
     return embed;
 }
 
@@ -114,9 +150,13 @@ async function navigationLoop(message, wikObj) {
     const totalLength = Math.max(1, wikObj.etymologies.map(etymologyObj => etymologyObj.partsOfSpeech.length).reduce((acc, curr) => acc + curr)); 
 
     let embed = createEmbed(wikObj, etymologyIndex, posIndex, totalIndex, totalLength);
-    let response = await message.channel.send(embed);
-
-
+	let response = undefined;
+	if (message instanceof Discord.CommandInteraction) {
+		// For / command
+		response = await message.editReply( { embeds: [embed] } );
+	} else {
+		response = await message.channel.send( { embeds: [embed] } );
+	}
     // Helper functions that will update either both indices or just the posIndex depending on the position.
     function decreaseIndex() {
         if (posIndex !== 0) {
@@ -148,8 +188,10 @@ async function navigationLoop(message, wikObj) {
             if (!first) {
                 await response.reactions.removeAll();
                 embed = createEmbed(wikObj, etymologyIndex, posIndex, totalIndex, totalLength);
-                response = await response.edit(embed);
-            } else first = false; 
+			} else first = false; 
+
+			response = await response.edit( { embeds: [embed] } );
+
             let added = [];
             if (etymologyIndex !== 0 || posIndex !== 0) { 
                 await response.react(LEFT);
@@ -160,9 +202,15 @@ async function navigationLoop(message, wikObj) {
                 added.push(RIGHT);
             }
 
-            let collected = await response.awaitReactions((reaction, user) => {
-                return added.includes(reaction.emoji.name) && user.id === message.author.id;
-            }, { max: 1, time: 180000, errors: ['time'] });
+			let user_id = undefined;
+			if (message instanceof Discord.CommandInteraction) 
+				user_id = message.user.id;
+			else 
+				user_id = message.author.id;
+
+            let collected = await response.awaitReactions( { 
+				filter: (reaction, user) => added.includes(reaction.emoji.name) && user.id === user_id,
+              max: 1, time: 180000, errors: ['time'] });
             collected.first().emoji.name === LEFT ? decreaseIndex() : increaseIndex();
         }
     }
