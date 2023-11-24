@@ -19,6 +19,7 @@
   "dependencies": {
     "discord.js": "^14.14.1",
     "dotenv": "^16.3.1",
-    "jsdom": "^22.1.0"
+    "jsdom": "^22.1.0",
+    "node-fetch": "^2.6.6"
   }
 }
