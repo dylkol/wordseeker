@@ -54,7 +54,15 @@ function parseWiktionaryObject(html, url, lang) {
         const doc = new JSDOM(html, { 'url': url }).window.document;
         // Parent of heading containing language id is the section describing the word in that language.
         const langElem = doc.getElementById(lang.language);
-        if (!langElem) throw new Error('Word not found in that language. However, it is available in other languages.');
+        if (!langElem) { 
+			// Only languages should have h2 headers
+			const languages = Array.from(doc.getElementsByTagName("H2")).map(elem => elem.id.replaceAll("_", " "));
+
+			throw new Error(
+			"Word not found in that language. However, it is available in other languages.\n" +
+			`Available languages:\n${languages.join("\n")}`);
+
+		}
         const section = langElem.parentNode;
         const etymologies = parseEtymologies(section);
         return { 'etymologies': etymologies };
